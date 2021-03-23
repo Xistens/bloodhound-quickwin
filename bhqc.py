@@ -23,8 +23,10 @@ class bcolors:
 def args():
 	parser = argparse.ArgumentParser(description="Quick win for bloodhound + neo4j")
 	parser.add_argument('-b', '--bolt', type=str, default="bolt://127.0.0.1:7687", help="Neo4j bolt connexion (default: bolt://127.0.0.1:7687)")
-	parser.add_argument('-u', '--username', type=str, default="neo4j", help="Neo4j username (default : neo4j)")
-	parser.add_argument('-p', '--password', type=str, default="neo4j",help="Neo4j password (default : neo4j)")
+	parser.add_argument('-u', '--username', type=str, default="neo4j", help="Neo4j username (default: neo4j)")
+	parser.add_argument('-p', '--password', type=str, default="neo4j", help="Neo4j password (default: neo4j)")
+	parser.add_argument('-y', '--years', type=int, default=None, help="Print enabled users where password is not changed for X year (default: 10)")
+	parser.add_argument('-n', '--no-color', dest="color", default=True, action="store_false", help="Disable colors")
 	return parser.parse_args()
 
 def print_title(t, color):
@@ -220,6 +222,19 @@ def enum_unconstrained_computer(g, color):
 		print("")
 	print("")
 
+def get_users(g, color, years=10):
+	count = stats_return_count(f"MATCH (u:User) WHERE u.pwdlastset < (datetime().epochseconds - ({years} * 365 * 86400)) and NOT u.pwdlastset IN [-1.0, 0.0] AND u.enabled = TRUE RETURN count(u)")
+	print_title(f"Password not changed > {years} y (Total: {count} users)", color)
+	req = g.run(f"""MATCH (u:User) 
+		WHERE u.pwdlastset < (datetime().epochseconds - ({years} * 365 * 86400)) 
+		and NOT u.pwdlastset IN [-1.0, 0.0] 
+		AND u.enabled = TRUE RETURN u.name""")
+
+	if not req:
+		print('[-] No entries found')
+	for u in req:
+		print(u[0])
+
 def stats(g, color):
 	print_title("Stats", color)
 	mytable = PrettyTable()
@@ -261,13 +276,17 @@ if __name__ == "__main__":
 		print(e)
 		exit(0)	
 
-	color = True
-	enum_DA(g, color)
-	enum_priv_SPN(g, color)
-	enum_priv_AS_REP_ROAST(g, color)
-	enum_all_SPN(g, color)
-	enum_asrep_roast(g, color)
-	enum_unconstrained_account(g, color)
-	enum_constrained_account(g, color)
-	enum_unconstrained_computer(g, color)
-	stats(g, color)
+	color = args.color
+
+	if args.years:
+		get_users(g, color, years=args.years)
+	else:
+		enum_DA(g, color)
+		enum_priv_SPN(g, color)
+		enum_priv_AS_REP_ROAST(g, color)
+		enum_all_SPN(g, color)
+		enum_asrep_roast(g, color)
+		enum_unconstrained_account(g, color)
+		enum_constrained_account(g, color)
+		enum_unconstrained_computer(g, color)
+		stats(g, color)
