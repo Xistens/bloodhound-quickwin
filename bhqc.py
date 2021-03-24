@@ -26,6 +26,7 @@ def args():
 	parser.add_argument('-u', '--username', type=str, default="neo4j", help="Neo4j username (default: neo4j)")
 	parser.add_argument('-p', '--password', type=str, default="neo4j", help="Neo4j password (default: neo4j)")
 	parser.add_argument('-y', '--years', type=int, default=None, help="Print enabled users where password is not changed for X year (default: 10)")
+	parser.add_argument('-s', '--spool', dest="ladmin", default=False, action="store_true", help="Find all computer accounts that have local admin rights (SpoolSample+Relay)")
 	parser.add_argument('-n', '--no-color', dest="color", default=True, action="store_false", help="Disable colors")
 	return parser.parse_args()
 
@@ -222,6 +223,16 @@ def enum_unconstrained_computer(g, color):
 		print("")
 	print("")
 
+def get_comp_localadmin(g, color):
+	print_title("Find all computer accounts that have local admin rights (SpoolSample+Relay)", color)
+	req = g.run("MATCH p=(m:Computer)-[r:AdminTo]->(n:Computer) RETURN p")
+
+	if not req:
+		print('[-] No entries found')
+	for u in req:
+		# TODO: Fix output
+		print(u)
+
 def get_users(g, color, years=10):
 	count = stats_return_count(f"MATCH (u:User) WHERE u.pwdlastset < (datetime().epochseconds - ({years} * 365 * 86400)) and NOT u.pwdlastset IN [-1.0, 0.0] AND u.enabled = TRUE RETURN count(u)")
 	print_title(f"Password not changed > {years} y (Total: {count} users)", color)
@@ -280,6 +291,8 @@ if __name__ == "__main__":
 
 	if args.years:
 		get_users(g, color, years=args.years)
+	elif args.ladmin:
+		get_comp_localadmin(g, color)
 	else:
 		enum_DA(g, color)
 		enum_priv_SPN(g, color)
