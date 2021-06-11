@@ -4,6 +4,7 @@
 
 # pip3 install py2neo
 # pip3 install pandas
+import sys
 from py2neo import Graph
 from prettytable import PrettyTable
 import argparse
@@ -29,7 +30,11 @@ def args():
 	parser.add_argument('-s', '--spool', dest="ladmin", default=False, action="store_true", help="Find all computer accounts that have local admin rights (SpoolSample+Relay)")
 	parser.add_argument('-n', '--no-color', dest="color", default=True, action="store_false", help="Disable colors")
 	parser.add_argument('--gpo', action='store_true')
-	parser.add_argument('--computer', action='store_true')
+	parser.add_argument('--sessions', action='store_true', help="Print all sessions")
+	parser.add_argument('--computer', action='store_true', help="List all computers")
+	parser.add_argument('--user', action='store_true', help="List all users")
+	parser.add_argument('--string', type=str, default=None, help="Used with --computer and --user: list only computers containing the given word")
+	parser.add_argument('--desc', dest="description", action="store_true", help="Used with --computer: Only display computers with descriptions")
 	return parser.parse_args()
 
 def print_title(t, color):
@@ -260,15 +265,51 @@ def get_gpo(g, color):
 			obj = u[0]
 			print(f"{obj['name']} - {obj['gpcpath']}")
 
-def get_computers(g, color):
-	print_title("Printing Computers with description", color)
-	req = g.run("MATCH (c:Computer) WHERE c.description IS NOT NULL RETURN c.name,c.description").to_table()
+def get_all_users(g, color, description=False, string=None):
+	print_title("Printing all users", color)
+
+	if string:
+		req = g.run(f'Match (n:User) WHERE toLower(n.name) CONTAINS "{string.lower()}" return n.name,n.description,n.pwdlastset').to_table()
+	elif description:
+		req = g.run("MATCH (c:User) WHERE c.description IS NOT NULL RETURN c.name,c.description,n.pwdlastset").to_table()
+	else:
+		req = g.run("MATCH (c:User) RETURN c.name").to_table()
 
 	if not req:
 		print('[-] No entries found')
 	else:
 		for c in req:
-			print(f"{c[0]} - {c[1]}")
+			if len(c) > 1:
+				print(f"{c[0]} - {c[1]} - {datetime.datetime.fromtimestamp(int(c[2]))}")
+			else:
+				print(f"{c[0]}")
+
+def get_computers(g, color, description=False, string=None):
+	print_title("Printing Computers with description", color)
+
+	if string:
+		req = g.run(f'Match (n:Computer) WHERE toLower(n.name) CONTAINS "{string.lower()}" return n.name,n.description').to_table()
+	elif description:
+		req = g.run("MATCH (c:Computer) WHERE c.description IS NOT NULL RETURN c.name,c.description").to_table()
+	else:
+		req = g.run("MATCH (c:Computer) RETURN c.name").to_table()
+
+	if not req:
+		print('[-] No entries found')
+	else:
+		for c in req:
+			if len(c) > 1:
+				print(f"{c[0]} - {c[1]}")
+			else:
+				print(f"{c[0]}")
+
+def has_session(g, color):
+	print_title("Printing all sessions", color)
+
+	req = g.run(f"MATCH (n:User) MATCH p = (c:Computer)-[:HasSession]->(n) return p").to_table()
+	for s in req:
+		for i in s:
+			print(i)
 
 def stats(g, color):
 	print_title("Stats", color)
@@ -320,7 +361,11 @@ if __name__ == "__main__":
 	elif args.gpo:
 		get_gpo(g, color)
 	elif args.computer:
-		get_computers(g, color)
+		get_computers(g, color, args.description, args.string)
+	elif args.user:
+		get_all_users(g, color, args.description, args.string)
+	elif args.sessions:
+		has_session(g, color)
 	else:
 		enum_DA(g, color)
 		enum_priv_SPN(g, color)
